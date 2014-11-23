@@ -1,0 +1,70 @@
+---
+title: "Data Science: Machine Learning"
+output: html_document
+---
+
+In order to predict the manner in which participant did the excercise, following analysis has been conducted using various techniques.Training dataset contains 19622 observation and 160 variables. Initial obervation of training dataset indicated that there are different character values used such as NA,"#DIV/0!" etc for missing obervation.Following code loads the data file, with NAs for all such cases.  
+
+```{r}
+
+library(ggplot2); library(lattice); library(caret) ;library(survival);library(splines)
+library(randomForest); library(gbm); library(rpart);library(e1071)
+library(MASS); library(plyr)
+
+trainPML <- read.csv("C:\\Users\\svaidya\\Downloads\\pml-training.csv", na.strings=c("","#DIV/0!","NA"))
+testPML <- read.csv("C:\\Users\\svaidya\\Downloads\\pml-testing.csv", na.strings=c("","#DIV/0!","NA"))
+```
+
+R fits a model to only non missing obervations.Following code attemts to remove all those variables where percentage of missing values is greater than 90. Resulting training dataset contains 60 variables. Further variables X, user name and  time stamp variables were removed as they are intuitively unrelated. There was a exploratory analysis conducated to understand the pattern of outliers. ALthough there are a few extreme values in the data, they have no particular pattern. Due to randomness of outliers and lack of resources to investigate the reason, no extreme values are modified.  
+```{r}
+varList <- colnames(trainPML)[1]
+for(i in 2:dim(trainPML)[2])
+{
+  countNA<- sum(is.na(trainPML[,i]))
+  if(countNA != 0){
+    percentNA <- countNA*100/19622
+    if(percentNA <= 90){
+      varList <- c(varList, colnames(trainPML)[i])
+    }
+  }
+  else {varList <- c(varList, colnames(trainPML)[i])}
+  i<-i+1
+}
+trainPML2 <- subset(trainPML, select = varList)
+trainPML3 <- subset(trainPML2, select =c(classe,  roll_belt, pitch_belt, yaw_belt, total_accel_belt,gyros_belt_x ,gyros_belt_y, gyros_belt_z, accel_belt_x,accel_belt_y, accel_belt_z ,magnet_belt_x, magnet_belt_y, magnet_belt_z, roll_arm,pitch_arm, yaw_arm, total_accel_arm, gyros_arm_x, gyros_arm_y, gyros_arm_z, accel_arm_x,accel_arm_y, accel_arm_z, magnet_arm_x, magnet_arm_y, magnet_arm_z,roll_dumbbell,   pitch_dumbbell, yaw_dumbbell,gyros_dumbbell_x, gyros_dumbbell_y,gyros_dumbbell_z, accel_dumbbell_x, accel_dumbbell_y, accel_dumbbell_z,magnet_dumbbell_x, magnet_dumbbell_y, magnet_dumbbell_z, roll_forearm, pitch_forearm,yaw_forearm,total_accel_forearm,gyros_forearm_x, gyros_forearm_y, gyros_forearm_z, accel_forearm_x, accel_forearm_y,accel_forearm_z, magnet_forearm_x, magnet_forearm_y, magnet_forearm_z))
+
+```
+
+To understnad the multicollinearity, correlation between the predictors is checked. Correlation between some of the predictors is high (0.56 and above). This is a concerning fact for models such as linear discriminant analysis, and appropriate modifications were done while fitting the model. 
+
+For estimating the prediction error correctly, given training dataset is divided into training (75%) and testing dataset (25%). For predicting the classe variable, randomForest model is built.
+
+```{r}
+inTrain = createDataPartition(trainPML3$classe, p = 3/4)[[1]]
+training= trainPML3[ inTrain,]
+testing = trainPML3[-inTrain,]
+
+set.seed(100)
+m.rf <- randomForest(classe~. , data=training)
+p1 <- predict(m.rf,newdata = testing)
+confusionMatrix(data=p1, testing$classe)
+```
+
+The model based on a training dataset is used to predict the dependent variable in the testing dataset. This gives us 99% accuracy. There are only 18 cases were model has misclassified. 
+
+To compare the performance of the random forest model, training dataset is used to predict using discriminant analysis and support vector machines. Due to the underlying assumptions in Linear discriminat analysis, principal components were used to handle multicollinearity. 
+
+```{r}
+m.lda <- train(classe~. , data=training, preProcess = "pca", method="lda")
+m.svm <- svm(classe~., data =training)
+
+p2 <- predict(m.lda,newdata = testing)
+p3 <- predict(m.svm,newdata = testing)
+
+confusionMatrix(data=p2, testing$classe)
+confusionMatrix(data=p3, testing$classe)
+```
+
+For support vector machine, accuracy is 95%; while for linear discriminant analysis, it is 50%.Due to high accuracy in crossvalidation for testing dataset, random forest is used for final predictions. 
+
+
